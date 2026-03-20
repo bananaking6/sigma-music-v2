@@ -89,7 +89,7 @@ class _HomeShellState extends State<_HomeShell> {
     if (streamInfoResult is Failure) {
       setState(() {
         _isLoadingPlayback = false;
-        _playbackError = streamInfoResult.message;
+        _playbackError = streamInfoResult.errorMessage ?? 'Unknown error';
       });
       return;
     }

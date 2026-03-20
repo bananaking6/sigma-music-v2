@@ -195,9 +195,19 @@ class TidalProviderPlugin implements MusicProviderPlugin {
           ),
         );
         final data = resp.data;
-        if (data is Map<String, dynamic>) return data;
-        if (data is String) return jsonDecode(data) as Map<String, dynamic>;
-        throw ParseError('Unexpected response type: ${data.runtimeType}');
+        late Map<String, dynamic> result;
+        if (data is Map<String, dynamic>) {
+          result = data;
+        } else if (data is String) {
+          result = jsonDecode(data) as Map<String, dynamic>;
+        } else {
+          throw ParseError('Unexpected response type: ${data.runtimeType}');
+        }
+        // TIDAL wraps API responses in a 'data' object; extract it if present
+        if (result['data'] is Map<String, dynamic>) {
+          return result['data'] as Map<String, dynamic>;
+        }
+        return result;
       } on DioException catch (e) {
         if (attempt < 2 && _resolver.rotateMetadata()) continue;
         throw NetworkError(
@@ -229,8 +239,16 @@ class TidalProviderPlugin implements MusicProviderPlugin {
         if (data is String) return jsonDecode(data) as List<dynamic>;
         // Some endpoints wrap the list in a map; try common keys.
         if (data is Map<String, dynamic>) {
-          for (final key in ['items', 'results', 'tracks', 'data']) {
+          // Check top-level keys first
+          for (final key in ['items', 'results', 'tracks']) {
             if (data[key] is List) return data[key] as List<dynamic>;
+          }
+          // Check nested 'data' object (TIDAL wraps results here)
+          if (data['data'] is Map<String, dynamic>) {
+            final dataMap = data['data'] as Map<String, dynamic>;
+            if (dataMap['items'] is List) {
+              return dataMap['items'] as List<dynamic>;
+            }
           }
         }
         return [];

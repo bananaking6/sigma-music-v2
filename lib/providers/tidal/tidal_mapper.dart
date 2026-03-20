@@ -114,6 +114,7 @@ class TidalMapper {
       audioQuality:
           AudioQuality.fromTidalValue(json['audioQuality'] as String? ?? ''),
       mimeType: json['mimeType'] as String? ?? 'audio/mp4',
+      streamUrl: json['streamUrl'] as String?,
       manifestBase64: json['manifest'] as String?,
       bitDepth: json['bitDepth'] as int?,
       sampleRate: json['sampleRate'] as int?,
