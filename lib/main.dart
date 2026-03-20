@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'app/app_bootstrap.dart';
+import 'core/models/album.dart';
+import 'core/models/artist.dart';
 import 'core/models/search_result.dart';
 import 'core/models/track.dart';
 import 'core/result/result.dart';
@@ -73,6 +77,39 @@ class _HomeShellState extends State<_HomeShell> {
     return null;
   }
 
+  String? _extractPlayableUrlFromManifest(String manifestBase64) {
+    String decoded;
+    try {
+      decoded = utf8.decode(base64Decode(manifestBase64));
+    } catch (_) {
+      return null;
+    }
+
+    try {
+      final dynamic json = jsonDecode(decoded);
+      if (json is Map<String, dynamic>) {
+        final urls = json['urls'];
+        if (urls is List) {
+          for (final url in urls) {
+            if (url is String && url.isNotEmpty) return url;
+          }
+        }
+        for (final key in ['url', 'manifestUrl']) {
+          final value = json[key];
+          if (value is String && value.isNotEmpty) return value;
+        }
+      }
+    } catch (_) {
+      // Not JSON; try XML-like manifests below.
+    }
+
+    final baseUrlMatch = RegExp(
+      r'<BaseURL>\s*(https?://[^<\s]+)\s*</BaseURL>',
+      caseSensitive: false,
+    ).firstMatch(decoded);
+    return baseUrlMatch?.group(1);
+  }
+
   Future<void> _playTrack(Track track) async {
     setState(() {
       _isLoadingPlayback = true;
@@ -95,18 +132,25 @@ class _HomeShellState extends State<_HomeShell> {
     }
 
     final info = streamInfoResult.valueOrNull;
-    final streamUrl = info?.streamUrl;
-    if (streamUrl == null || streamUrl.isEmpty) {
+    final streamUrl = info?.streamUrl?.trim();
+    final manifestUrl = (info?.manifestBase64 != null &&
+            info!.manifestBase64!.isNotEmpty)
+        ? _extractPlayableUrlFromManifest(info.manifestBase64!)
+        : null;
+    final resolvedStreamUrl = (streamUrl != null && streamUrl.isNotEmpty)
+        ? streamUrl
+        : manifestUrl;
+
+    if (resolvedStreamUrl == null || resolvedStreamUrl.isEmpty) {
       setState(() {
         _isLoadingPlayback = false;
-        _playbackError =
-            'Stream URL unavailable for this track. Manifest playback is not wired yet.';
+        _playbackError = 'Unable to play this track. Please try another one.';
       });
       return;
     }
 
     try {
-      final playableUri = _parsePlayableStreamUri(streamUrl);
+      final playableUri = _parsePlayableStreamUri(resolvedStreamUrl);
       if (playableUri == null) {
         setState(() {
           _isLoadingPlayback = false;
@@ -336,7 +380,11 @@ class _SearchTabState extends State<_SearchTab> {
       });
       return;
     }
-
+    setState(() {
+      _isSearching = false;
+      _results = const [];
+      _searchError = 'Search failed. Please try again.';
+    });
   }
 
   @override
@@ -419,13 +467,11 @@ class _SearchTabState extends State<_SearchTab> {
                           child: ListTile(
                             leading: const Icon(Icons.album_outlined),
                             title: Text(album.title),
-                            subtitle: Text('${album.artist.name} • details coming soon'),
+                            subtitle: Text(album.artist.name),
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Album details are coming soon. Tap a track result to play.',
-                                  ),
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => _AlbumDetailsPage(album: album),
                                 ),
                               );
                             },
@@ -437,13 +483,11 @@ class _SearchTabState extends State<_SearchTab> {
                           child: ListTile(
                             leading: const Icon(Icons.person_outline),
                             title: Text(artist.name),
-                            subtitle: const Text('Artist details coming soon'),
+                            subtitle: const Text('Artist information'),
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Artist details are coming soon. Tap a track result to play.',
-                                  ),
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => _ArtistDetailsPage(artist: artist),
                                 ),
                               );
                             },
@@ -546,6 +590,80 @@ class _LibraryTab extends StatelessWidget {
           'playlists are fully connected.',
           textAlign: TextAlign.center,
         ),
+      ),
+    );
+  }
+}
+
+class _AlbumDetailsPage extends StatelessWidget {
+  const _AlbumDetailsPage({required this.album});
+
+  final Album album;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Album')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.album),
+              title: Text(album.title),
+              subtitle: Text(album.artist.name),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.format_list_numbered),
+              title: const Text('Tracks'),
+              subtitle: Text(
+                album.tracks.isEmpty
+                    ? 'Track list unavailable'
+                    : '${album.tracks.length} tracks',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArtistDetailsPage extends StatelessWidget {
+  const _ArtistDetailsPage({required this.artist});
+
+  final Artist artist;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Artist')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.person),
+              title: Text(artist.name),
+              subtitle: Text(
+                artist.popularity == null
+                    ? 'Popularity unavailable'
+                    : 'Popularity: ${artist.popularity}',
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.music_note_outlined),
+              title: Text('Top tracks'),
+              subtitle: Text('Coming next: top tracks and discography'),
+            ),
+          ),
+        ],
       ),
     );
   }
