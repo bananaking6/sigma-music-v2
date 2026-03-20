@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../core/models/album.dart';
 import '../../core/models/artist.dart';
 import '../../core/models/audio_stream_info.dart';
@@ -109,13 +111,39 @@ class TidalMapper {
   // ---------------------------------------------------------------------------
 
   AudioStreamInfo streamInfoFromJson(Map<String, dynamic> json) {
+    // Extract stream URL from manifest or fallback fields
+    String? streamUrl;
+    String? manifestBase64 = json['manifest'] as String?;
+
+    // If manifest is present, try to decode and extract URLs
+    if (manifestBase64 != null && manifestBase64.isNotEmpty) {
+      try {
+        final manifestJson = jsonDecode(
+          utf8.decode(base64Decode(manifestBase64)),
+        ) as Map<String, dynamic>;
+
+        // Extract first URL from manifest's urls array
+        final urls = manifestJson['urls'];
+        if (urls is List && urls.isNotEmpty) {
+          streamUrl = urls.first as String?;
+        }
+      } catch (_) {
+        // Manifest decode failed, fall through to fallback fields
+      }
+    }
+
+    // Fall back to direct 'streamUrl' field if manifest extraction didn't work
+    streamUrl ??= json['streamUrl'] as String?;
+    // Fall back to 'url' field as last resort
+    streamUrl ??= json['url'] as String?;
+
     return AudioStreamInfo(
       trackId: _str(json['trackId']),
       audioQuality:
           AudioQuality.fromTidalValue(json['audioQuality'] as String? ?? ''),
       mimeType: json['mimeType'] as String? ?? 'audio/mp4',
-      streamUrl: json['streamUrl'] as String?,
-      manifestBase64: json['manifest'] as String?,
+      streamUrl: streamUrl,
+      manifestBase64: manifestBase64,
       bitDepth: json['bitDepth'] as int?,
       sampleRate: json['sampleRate'] as int?,
     );

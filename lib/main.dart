@@ -6,9 +6,12 @@ import 'package:just_audio/just_audio.dart';
 import 'app/app_bootstrap.dart';
 import 'core/models/album.dart';
 import 'core/models/artist.dart';
+import 'core/models/lyrics.dart';
 import 'core/models/search_result.dart';
 import 'core/models/track.dart';
 import 'core/result/result.dart';
+import 'features/playback/lyrics_display.dart';
+import 'features/playback/playback_queue.dart';
 import 'features/playback/unified_music_repository.dart';
 
 void main() async {
@@ -52,6 +55,7 @@ class _HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<_HomeShell> {
   final AudioPlayer _audioPlayer = AudioPlayer();
+  late final PlaybackQueue _queue = PlaybackQueue();
 
   int _selectedTabIndex = 0;
   Track? _nowPlaying;
@@ -110,7 +114,33 @@ class _HomeShellState extends State<_HomeShell> {
     return baseUrlMatch?.group(1);
   }
 
+  Future<void> _skipToNext() async {
+    final nextTrack = _queue.next();
+    if (nextTrack != null) {
+      await _playTrackFromQueue(nextTrack);
+    }
+  }
+
+  Future<void> _skipToPrevious() async {
+    final previousTrack = _queue.previous();
+    if (previousTrack != null) {
+      await _playTrackFromQueue(previousTrack);
+    }
+  }
+
+  /// Play a track and add it to the queue (from search/home)
   Future<void> _playTrack(Track track) async {
+    // Add track to queue
+    _queue.add(track);
+    
+    // Jump to this track in the queue
+    _queue.jumpTo(_queue.length - 1);
+    
+    await _playTrackFromQueue(track);
+  }
+
+  /// Internal method to play the given track without modifying queue
+  Future<void> _playTrackFromQueue(Track track) async {
     setState(() {
       _isLoadingPlayback = true;
       _playbackError = null;
@@ -118,7 +148,7 @@ class _HomeShellState extends State<_HomeShell> {
 
     final streamInfoResult = await widget.repository.getStreamInfo(
       track.id,
-      quality: AudioQuality.high,
+      quality: AudioQuality.low,
     );
 
     if (!mounted) return;
@@ -179,6 +209,20 @@ class _HomeShellState extends State<_HomeShell> {
     }
   }
 
+  void _showQueueDialog() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => _QueueDialog(
+        queue: _queue,
+        currentTrackId: _nowPlaying?.id,
+        onTrackSelected: (track) {
+          Navigator.pop(context);
+          _playTrack(track);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
@@ -197,7 +241,21 @@ class _HomeShellState extends State<_HomeShell> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sigma Music')),
+      appBar: AppBar(
+        title: const Text('Sigma Music'),
+        actions: [
+          if (_queue.length > 0)
+            Semantics(
+              button: true,
+              label: 'Show queue',
+              child: IconButton(
+                onPressed: _showQueueDialog,
+                icon: const Icon(Icons.playlist_play),
+                tooltip: 'Queue (${_queue.length})',
+              ),
+            ),
+        ],
+      ),
       body: IndexedStack(index: _selectedTabIndex, children: pages),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -206,6 +264,11 @@ class _HomeShellState extends State<_HomeShell> {
             _NowPlayingBar(
               track: _nowPlaying!,
               player: _audioPlayer,
+              repository: widget.repository,
+              onSkipNext: _queue.hasNext ? _skipToNext : null,
+              onSkipPrevious: _queue.hasPrevious ? _skipToPrevious : null,
+              hasNext: _queue.hasNext,
+              hasPrevious: _queue.hasPrevious,
               onStop: () async {
                 try {
                   await _audioPlayer.stop();
@@ -506,12 +569,38 @@ class _NowPlayingBar extends StatelessWidget {
   const _NowPlayingBar({
     required this.track,
     required this.player,
+    required this.repository,
     required this.onStop,
+    this.onSkipNext,
+    this.onSkipPrevious,
+    this.hasNext = false,
+    this.hasPrevious = false,
   });
 
   final Track track;
   final AudioPlayer player;
+  final UnifiedMusicRepository repository;
   final Future<void> Function() onStop;
+  final Future<void> Function()? onSkipNext;
+  final Future<void> Function()? onSkipPrevious;
+  final bool hasNext;
+  final bool hasPrevious;
+
+  Future<void> _showLyrics(BuildContext context) async {
+    final result = await repository.getLyricsBestEffort(track.id);
+    
+    if (!context.mounted) return;
+    
+    final lyrics = result is Success ? result.valueOrNull : null;
+    
+    showDialog(
+      context: context,
+      builder: (context) => LyricsDisplay(
+        lyrics: lyrics,
+        onClose: () => Navigator.pop(context),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -539,6 +628,34 @@ class _NowPlayingBar extends StatelessWidget {
                 children: [
                   Semantics(
                     button: true,
+                    label: 'View lyrics',
+                    child: IconButton(
+                      onPressed: () => _showLyrics(context),
+                      icon: const Icon(Icons.lyrics),
+                    ),
+                  ),
+                  if (onSkipPrevious != null)
+                    Semantics(
+                      button: true,
+                      label: 'Previous track',
+                      child: IconButton(
+                        onPressed: hasPrevious
+                            ? () async {
+                                try {
+                                  await onSkipPrevious!();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Skip failed: $e')),
+                                  );
+                                }
+                              }
+                            : null,
+                        icon: const Icon(Icons.skip_previous),
+                      ),
+                    ),
+                  Semantics(
+                    button: true,
                     label: isPlaying ? 'Pause playback' : 'Resume playback',
                     child: IconButton(
                       onPressed: () async {
@@ -558,6 +675,26 @@ class _NowPlayingBar extends StatelessWidget {
                       icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
                     ),
                   ),
+                  if (onSkipNext != null)
+                    Semantics(
+                      button: true,
+                      label: 'Next track',
+                      child: IconButton(
+                        onPressed: hasNext
+                            ? () async {
+                                try {
+                                  await onSkipNext!();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Skip failed: $e')),
+                                  );
+                                }
+                              }
+                            : null,
+                        icon: const Icon(Icons.skip_next),
+                      ),
+                    ),
                   Semantics(
                     button: true,
                     label: 'Stop playback',
@@ -591,6 +728,90 @@ class _LibraryTab extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ),
+    );
+  }
+}
+
+class _QueueDialog extends StatelessWidget {
+  const _QueueDialog({
+    required this.queue,
+    required this.currentTrackId,
+    required this.onTrackSelected,
+  });
+
+  final PlaybackQueue queue;
+  final String? currentTrackId;
+  final Function(Track) onTrackSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final tracks = queue.tracks;
+    
+    return DraggableScrollableSheet(
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Queue (${tracks.length})',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: tracks.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Queue is empty',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      itemCount: tracks.length,
+                      itemBuilder: (context, index) {
+                        final track = tracks[index];
+                        final isCurrentTrack = track.id == currentTrackId;
+                        
+                        return ListTile(
+                          selected: isCurrentTrack,
+                          leading: isCurrentTrack
+                              ? const Icon(Icons.music_note)
+                              : Text('${index + 1}'),
+                          title: Text(
+                            track.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: isCurrentTrack
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          subtitle: Text(
+                            track.artist.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () => onTrackSelected(track),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
