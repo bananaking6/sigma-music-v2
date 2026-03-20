@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -11,6 +13,7 @@ import 'core/models/search_result.dart';
 import 'core/models/track.dart';
 import 'core/result/result.dart';
 import 'features/playback/lyrics_display.dart';
+import 'features/playback/audio_handler.dart';
 import 'features/playback/playback_queue.dart';
 import 'features/playback/unified_music_repository.dart';
 
@@ -56,11 +59,38 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   late final PlaybackQueue _queue = PlaybackQueue();
+  SigmaAudioHandler? _audioHandler;
 
   int _selectedTabIndex = 0;
   Track? _nowPlaying;
   bool _isLoadingPlayback = false;
   String? _playbackError;
+  final List<Track> _savedTracks = [];
+  final Set<String> _savedTrackIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAudioHandler();
+  }
+
+  Future<void> _initializeAudioHandler() async {
+    try {
+      _audioHandler = await AudioService.init(
+        builder: () => SigmaAudioHandler(audioPlayer: _audioPlayer, queue: _queue),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.sigmamusic.playback',
+          androidNotificationChannelName: 'Sigma Music Playback',
+          androidNotificationOngoing: true,
+        ),
+      );
+      await _audioHandler?.initialize();
+      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
+    } catch (_) {
+      // audio_service may be unavailable in this execution environment.
+      debugPrint('[SigmaMusic] audio_service init skipped');
+    }
+  }
 
   @override
   void dispose() {
@@ -117,6 +147,7 @@ class _HomeShellState extends State<_HomeShell> {
   Future<void> _skipToNext() async {
     final nextTrack = _queue.next();
     if (nextTrack != null) {
+      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
       await _playTrackFromQueue(nextTrack);
     }
   }
@@ -124,6 +155,7 @@ class _HomeShellState extends State<_HomeShell> {
   Future<void> _skipToPrevious() async {
     final previousTrack = _queue.previous();
     if (previousTrack != null) {
+      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
       await _playTrackFromQueue(previousTrack);
     }
   }
@@ -135,8 +167,17 @@ class _HomeShellState extends State<_HomeShell> {
     
     // Jump to this track in the queue
     _queue.jumpTo(_queue.length - 1);
+    _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
     
     await _playTrackFromQueue(track);
+  }
+
+  void _saveTrack(Track track) {
+    if (_savedTrackIds.contains(track.id)) return;
+    setState(() {
+      _savedTracks.add(track);
+      _savedTrackIds.add(track.id);
+    });
   }
 
   /// Internal method to play the given track without modifying queue
@@ -200,6 +241,8 @@ class _HomeShellState extends State<_HomeShell> {
         _isLoadingPlayback = false;
         _nowPlaying = track;
       });
+      _audioHandler?.syncNowPlaying(track);
+      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -215,9 +258,11 @@ class _HomeShellState extends State<_HomeShell> {
       builder: (context) => _QueueDialog(
         queue: _queue,
         currentTrackId: _nowPlaying?.id,
-        onTrackSelected: (track) {
+        onTrackSelected: (track, index) {
           Navigator.pop(context);
-          _playTrack(track);
+          _queue.jumpTo(index);
+          _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
+          _playTrackFromQueue(track);
         },
       ),
     );
@@ -234,10 +279,14 @@ class _HomeShellState extends State<_HomeShell> {
       _SearchTab(
         repository: widget.repository,
         onTrackPlayRequested: _playTrack,
+        onTrackSaved: _saveTrack,
         playingTrackId: _nowPlaying?.id,
         isLoadingPlayback: _isLoadingPlayback,
       ),
-      const _LibraryTab(),
+      _LibraryTab(
+        savedTracks: _savedTracks,
+        onTrackPlayRequested: _playTrack,
+      ),
     ];
 
     return Scaffold(
@@ -277,6 +326,7 @@ class _HomeShellState extends State<_HomeShell> {
                       _nowPlaying = null;
                     });
                   }
+                  _audioHandler?.syncNowPlaying(null);
                 } catch (e) {
                   if (mounted) {
                     setState(() {
@@ -383,12 +433,14 @@ class _SearchTab extends StatefulWidget {
   const _SearchTab({
     required this.repository,
     required this.onTrackPlayRequested,
+    required this.onTrackSaved,
     required this.playingTrackId,
     required this.isLoadingPlayback,
   });
 
   final UnifiedMusicRepository repository;
   final Future<void> Function(Track track) onTrackPlayRequested;
+  final void Function(Track track) onTrackSaved;
   final String? playingTrackId;
   final bool isLoadingPlayback;
 
@@ -510,14 +562,30 @@ class _SearchTabState extends State<_SearchTab> {
                               ? 'Currently playing track ${track.title}'
                               : 'Play track ${track.title}',
                           child: ListTile(
-                            leading: const Icon(Icons.music_note),
+                            leading: _ArtworkAvatar(
+                              imageUrl: track.coverUrl ?? track.album.coverUrl,
+                              icon: Icons.music_note,
+                            ),
                             title: Text(track.title),
                             subtitle:
                                 Text('${track.artist.name} • ${track.album.title}'),
-                            trailing: Icon(
-                              widget.playingTrackId == track.id
-                                  ? Icons.equalizer
-                                  : Icons.play_arrow,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Semantics(
+                                  button: true,
+                                  label: 'Save track ${track.title}',
+                                  child: IconButton(
+                                    onPressed: () => widget.onTrackSaved(track),
+                                    icon: const Icon(Icons.favorite_border),
+                                  ),
+                                ),
+                                Icon(
+                                  widget.playingTrackId == track.id
+                                      ? Icons.equalizer
+                                      : Icons.play_arrow,
+                                ),
+                              ],
                             ),
                             onTap: widget.isLoadingPlayback
                                 ? null
@@ -528,7 +596,10 @@ class _SearchTabState extends State<_SearchTab> {
                           button: true,
                           label: 'View album details for ${album.title}',
                           child: ListTile(
-                            leading: const Icon(Icons.album_outlined),
+                            leading: _ArtworkAvatar(
+                              imageUrl: album.coverUrl,
+                              icon: Icons.album_outlined,
+                            ),
                             title: Text(album.title),
                             subtitle: Text(album.artist.name),
                             onTap: () {
@@ -544,7 +615,10 @@ class _SearchTabState extends State<_SearchTab> {
                           button: true,
                           label: 'View artist details for ${artist.name}',
                           child: ListTile(
-                            leading: const Icon(Icons.person_outline),
+                            leading: _ArtworkAvatar(
+                              imageUrl: artist.pictureUrl,
+                              icon: Icons.person_outline,
+                            ),
                             title: Text(artist.name),
                             subtitle: const Text('Artist information'),
                             onTap: () {
@@ -714,19 +788,126 @@ class _NowPlayingBar extends StatelessWidget {
 }
 
 class _LibraryTab extends StatelessWidget {
-  const _LibraryTab();
+  const _LibraryTab({
+    required this.savedTracks,
+    required this.onTrackPlayRequested,
+  });
+
+  final List<Track> savedTracks;
+  final Future<void> Function(Track track) onTrackPlayRequested;
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          'Library UI scaffold\n\n'
-          'Local and cloud library screens will appear here once indexing and '
-          'playlists are fully connected.',
-          textAlign: TextAlign.center,
+    if (savedTracks.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'No saved tracks yet.\nUse Search and tap the heart icon to build a playlist.',
+            textAlign: TextAlign.center,
+          ),
         ),
+      );
+    }
+    return ListView.separated(
+      itemCount: savedTracks.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final track = savedTracks[index];
+        return ListTile(
+          leading: _ArtworkAvatar(
+            imageUrl: track.coverUrl ?? track.album.coverUrl,
+            icon: Icons.favorite,
+          ),
+          title: Text(track.title),
+          subtitle: Text(
+            '${track.artist.name} • ${track.album.title}\nSaved for this app session',
+          ),
+          isThreeLine: true,
+          trailing: const Icon(Icons.playlist_play),
+          onTap: () => onTrackPlayRequested(track),
+        );
+      },
+    );
+  }
+}
+
+class _ArtworkAvatar extends StatelessWidget {
+  const _ArtworkAvatar({required this.imageUrl, required this.icon});
+
+  final String? imageUrl;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.network(
+          imageUrl!,
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(icon),
+        ),
+      );
+    }
+    return Icon(icon);
+  }
+}
+
+class _CoverHeader extends StatelessWidget {
+  const _CoverHeader({
+    required this.imageUrl,
+    required this.icon,
+    required this.label,
+  });
+
+  final String? imageUrl;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: Image.network(
+            imageUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _FallbackCover(icon: icon, label: label),
+          ),
+        ),
+      );
+    }
+    return _FallbackCover(icon: icon, label: label);
+  }
+}
+
+class _FallbackCover extends StatelessWidget {
+  const _FallbackCover({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 44),
+          const SizedBox(height: 8),
+          Text(label, maxLines: 2, textAlign: TextAlign.center),
+        ],
       ),
     );
   }
@@ -741,7 +922,7 @@ class _QueueDialog extends StatelessWidget {
 
   final PlaybackQueue queue;
   final String? currentTrackId;
-  final Function(Track) onTrackSelected;
+  final void Function(Track track, int index) onTrackSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -804,8 +985,8 @@ class _QueueDialog extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          onTap: () => onTrackSelected(track),
-                        );
+                           onTap: () => onTrackSelected(track, index),
+                         );
                       },
                     ),
             ),
@@ -828,6 +1009,12 @@ class _AlbumDetailsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _CoverHeader(
+            imageUrl: album.coverUrl,
+            icon: Icons.album,
+            label: album.title,
+          ),
+          const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: const Icon(Icons.album),
@@ -865,6 +1052,12 @@ class _ArtistDetailsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _CoverHeader(
+            imageUrl: artist.pictureUrl,
+            icon: Icons.person,
+            label: artist.name,
+          ),
+          const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: const Icon(Icons.person),

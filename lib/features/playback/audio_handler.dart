@@ -31,6 +31,17 @@ class SigmaAudioHandler extends BaseAudioHandler {
     _updateQueue();
   }
 
+  /// Synchronizes the queue and current queue index with system media session.
+  void syncQueue(List<Track> tracks, int currentIndex) {
+    queue.add(List<MediaItem>.from(tracks.map(_trackToMediaItem)));
+    queueIndex.add(currentIndex);
+  }
+
+  /// Synchronizes currently playing media item for lockscreen/notification.
+  void syncNowPlaying(Track? track) {
+    mediaItem.add(_trackToMediaItem(track));
+  }
+
   /// Updates the media session queue based on the playback queue.
   void _updateQueue() {
     mediaItem.add(_trackToMediaItem(_queue.currentTrack));
@@ -94,20 +105,20 @@ class SigmaAudioHandler extends BaseAudioHandler {
   }
 
   /// Maps just_audio ProcessingState to audio_service ProcessingState.
-  static ProcessingState _mapProcessingState(
+  static AudioProcessingState _mapProcessingState(
     ProcessingState audioProcessingState,
   ) {
     switch (audioProcessingState) {
       case ProcessingState.idle:
-        return ProcessingState.idle;
+        return AudioProcessingState.idle;
       case ProcessingState.loading:
-        return ProcessingState.loading;
+        return AudioProcessingState.loading;
       case ProcessingState.buffering:
-        return ProcessingState.buffering;
+        return AudioProcessingState.buffering;
       case ProcessingState.ready:
-        return ProcessingState.ready;
+        return AudioProcessingState.ready;
       case ProcessingState.completed:
-        return ProcessingState.completed;
+        return AudioProcessingState.completed;
     }
   }
 

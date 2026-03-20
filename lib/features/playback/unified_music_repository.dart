@@ -17,9 +17,11 @@ import '../../core/result/result.dart';
 /// [getLyricsBestEffort] first tries the active provider, then falls back to
 /// any other registered provider that advertises [ProviderCapability.lyrics].
 class UnifiedMusicRepository {
-  const UnifiedMusicRepository(this._registry);
+  UnifiedMusicRepository(this._registry);
 
   final ProviderRegistry _registry;
+  final Map<String, List<SearchResultItem>> _searchCache = {};
+  final Map<String, AudioStreamInfo> _streamInfoCache = {};
 
   // ---------------------------------------------------------------------------
   // Search
@@ -28,10 +30,24 @@ class UnifiedMusicRepository {
   Future<Result<List<SearchResultItem>>> search(
     String query, {
     int limit = 25,
-  }) {
+    bool useCache = true,
+  }) async {
     final provider = _registry.activeProvider;
     if (provider == null) return _noProvider();
-    return provider.search(query, limit: limit);
+    final normalizedQuery = query.trim().toLowerCase();
+    final cacheKey = '$normalizedQuery::$limit::${provider.id}';
+    if (useCache) {
+      final cached = _searchCache[cacheKey];
+      if (cached != null) {
+        return Result.success(cached);
+      }
+    }
+
+    final result = await provider.search(query, limit: limit);
+    if (result is Success<List<SearchResultItem>>) {
+      _searchCache[cacheKey] = result.value;
+    }
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -57,10 +73,22 @@ class UnifiedMusicRepository {
   Future<Result<AudioStreamInfo>> getStreamInfo(
     String trackId, {
     AudioQuality quality = AudioQuality.hiResLossless,
-  }) {
+    bool useCache = true,
+  }) async {
     final provider = _registry.activeProvider;
     if (provider == null) return _noProvider();
-    return provider.getStreamInfo(trackId, quality: quality);
+    final cacheKey = '${provider.id}::$trackId::${quality.name}';
+    if (useCache) {
+      final cached = _streamInfoCache[cacheKey];
+      if (cached != null) {
+        return Result.success(cached);
+      }
+    }
+    final result = await provider.getStreamInfo(trackId, quality: quality);
+    if (result is Success<AudioStreamInfo>) {
+      _streamInfoCache[cacheKey] = result.value;
+    }
+    return result;
   }
 
   // ---------------------------------------------------------------------------

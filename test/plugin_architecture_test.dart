@@ -43,6 +43,8 @@ class FakeProvider implements MusicProviderPlugin {
 
   final bool shouldFail;
   final bool hasLyrics;
+  int searchCalls = 0;
+  int streamInfoCalls = 0;
 
   static final _artist = const Artist(id: '1', name: 'Test Artist');
   static final _album = Album(
@@ -63,11 +65,15 @@ class FakeProvider implements MusicProviderPlugin {
       shouldFail ? const Result.failure('init failed') : const Result.success(null);
 
   @override
-  Future<Result<List<SearchResultItem>>> search(String query,
-          {int limit = 25}) async =>
-      shouldFail
-          ? const Result.failure('search failed')
-          : Result.success([TrackResult(_track)]);
+  Future<Result<List<SearchResultItem>>> search(
+    String query, {
+    int limit = 25,
+  }) async {
+    searchCalls++;
+    return shouldFail
+        ? const Result.failure('search failed')
+        : Result.success([TrackResult(_track)]);
+  }
 
   @override
   Future<Result<Track>> getTrackById(String id) async =>
@@ -82,16 +88,22 @@ class FakeProvider implements MusicProviderPlugin {
       shouldFail ? const Result.failure('not found') : Result.success(_artist);
 
   @override
-  Future<Result<AudioStreamInfo>> getStreamInfo(String trackId,
-          {AudioQuality quality = AudioQuality.hiResLossless}) async =>
-      shouldFail
-          ? const Result.failure('stream failed')
-          : Result.success(AudioStreamInfo(
+  Future<Result<AudioStreamInfo>> getStreamInfo(
+    String trackId, {
+    AudioQuality quality = AudioQuality.hiResLossless,
+  }) async {
+    streamInfoCalls++;
+    return shouldFail
+        ? const Result.failure('stream failed')
+        : Result.success(
+            AudioStreamInfo(
               trackId: trackId,
               audioQuality: AudioQuality.lossless,
               mimeType: 'audio/flac',
               streamUrl: 'https://example.com/stream',
-            ));
+            ),
+          );
+  }
 
   @override
   Future<Result<Lyrics>> getLyrics(String trackId) async =>
@@ -256,9 +268,11 @@ void main() {
   group('UnifiedMusicRepository', () {
     late ProviderRegistry registry;
     late UnifiedMusicRepository repo;
+    late FakeProvider provider;
 
     setUp(() {
-      registry = ProviderRegistry()..register(FakeProvider(id: 'fake'));
+      provider = FakeProvider(id: 'fake');
+      registry = ProviderRegistry()..register(provider);
       repo = UnifiedMusicRepository(registry);
     });
 
@@ -307,6 +321,22 @@ void main() {
       final r = await repo.getStreamInfo('1');
       expect(r.isSuccess, isTrue);
       expect(r.valueOrNull?.trackId, '1');
+    });
+
+    test('search caches results per query/provider', () async {
+      final r1 = await repo.search('hello', limit: 20);
+      final r2 = await repo.search('hello', limit: 20);
+      expect(r1.isSuccess, isTrue);
+      expect(r2.isSuccess, isTrue);
+      expect(provider.searchCalls, 1);
+    });
+
+    test('getStreamInfo caches by track and quality', () async {
+      final r1 = await repo.getStreamInfo('1', quality: AudioQuality.low);
+      final r2 = await repo.getStreamInfo('1', quality: AudioQuality.low);
+      expect(r1.isSuccess, isTrue);
+      expect(r2.isSuccess, isTrue);
+      expect(provider.streamInfoCalls, 1);
     });
   });
 
