@@ -158,6 +158,22 @@ class TidalProviderPlugin implements MusicProviderPlugin {
   }
 
   // ---------------------------------------------------------------------------
+  // Offline hooks (not implemented for no-auth scaffold)
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<Result<void>> downloadTrack(String trackId) async {
+    return const Result.failure(
+      'Downloads require authentication (not yet implemented)',
+    );
+  }
+
+  @override
+  Future<Result<bool>> isTrackDownloaded(String trackId) async {
+    return const Result.success(false);
+  }
+
+  // ---------------------------------------------------------------------------
   // HTTP helpers
   // ---------------------------------------------------------------------------
 
