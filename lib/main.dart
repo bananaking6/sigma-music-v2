@@ -1,21 +1,18 @@
 import 'dart:convert';
 
-import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
-import 'app/app_bootstrap.dart';
-import 'core/models/album.dart';
-import 'core/models/artist.dart';
-import 'core/models/lyrics.dart';
-import 'core/models/search_result.dart';
-import 'core/models/track.dart';
-import 'core/result/result.dart';
-import 'features/playback/lyrics_display.dart';
-import 'features/playback/audio_handler.dart';
-import 'features/playback/playback_queue.dart';
-import 'features/playback/unified_music_repository.dart';
+import 'package:sigma_music/app/app_bootstrap.dart';
+import 'package:sigma_music/core/models/album.dart';
+import 'package:sigma_music/core/models/artist.dart';
+import 'package:sigma_music/core/models/search_result.dart';
+import 'package:sigma_music/core/models/track.dart';
+import 'package:sigma_music/core/result/result.dart';
+import 'package:sigma_music/features/playback/lyrics_display.dart';
+import 'package:sigma_music/features/playback/playback_queue.dart';
+import 'package:sigma_music/features/playback/unified_music_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +56,6 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   late final PlaybackQueue _queue = PlaybackQueue();
-  SigmaAudioHandler? _audioHandler;
 
   int _selectedTabIndex = 0;
   Track? _nowPlaying;
@@ -67,30 +63,6 @@ class _HomeShellState extends State<_HomeShell> {
   String? _playbackError;
   final List<Track> _savedTracks = [];
   final Set<String> _savedTrackIds = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeAudioHandler();
-  }
-
-  Future<void> _initializeAudioHandler() async {
-    try {
-      _audioHandler = await AudioService.init(
-        builder: () => SigmaAudioHandler(audioPlayer: _audioPlayer, queue: _queue),
-        config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.sigmamusic.playback',
-          androidNotificationChannelName: 'Sigma Music Playback',
-          androidNotificationOngoing: true,
-        ),
-      );
-      await _audioHandler?.initialize();
-      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
-    } catch (_) {
-      // audio_service may be unavailable in this execution environment.
-      debugPrint('[SigmaMusic] audio_service init skipped');
-    }
-  }
 
   @override
   void dispose() {
@@ -147,7 +119,6 @@ class _HomeShellState extends State<_HomeShell> {
   Future<void> _skipToNext() async {
     final nextTrack = _queue.next();
     if (nextTrack != null) {
-      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
       await _playTrackFromQueue(nextTrack);
     }
   }
@@ -155,7 +126,6 @@ class _HomeShellState extends State<_HomeShell> {
   Future<void> _skipToPrevious() async {
     final previousTrack = _queue.previous();
     if (previousTrack != null) {
-      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
       await _playTrackFromQueue(previousTrack);
     }
   }
@@ -167,7 +137,6 @@ class _HomeShellState extends State<_HomeShell> {
     
     // Jump to this track in the queue
     _queue.jumpTo(_queue.length - 1);
-    _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
     
     await _playTrackFromQueue(track);
   }
@@ -241,8 +210,6 @@ class _HomeShellState extends State<_HomeShell> {
         _isLoadingPlayback = false;
         _nowPlaying = track;
       });
-      _audioHandler?.syncNowPlaying(track);
-      _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -261,7 +228,6 @@ class _HomeShellState extends State<_HomeShell> {
         onTrackSelected: (track, index) {
           Navigator.pop(context);
           _queue.jumpTo(index);
-          _audioHandler?.syncQueue(_queue.tracks, _queue.currentIndex);
           _playTrackFromQueue(track);
         },
       ),
@@ -326,7 +292,6 @@ class _HomeShellState extends State<_HomeShell> {
                       _nowPlaying = null;
                     });
                   }
-                  _audioHandler?.syncNowPlaying(null);
                 } catch (e) {
                   if (mounted) {
                     setState(() {

@@ -1,11 +1,11 @@
-import '../../core/models/album.dart';
-import '../../core/models/audio_stream_info.dart';
-import '../../core/models/lyrics.dart';
-import '../../core/models/search_result.dart';
-import '../../core/models/track.dart';
-import '../../core/plugin/provider_capabilities.dart';
-import '../../core/plugin/provider_registry.dart';
-import '../../core/result/result.dart';
+import 'package:sigma_music/core/models/album.dart';
+import 'package:sigma_music/core/models/audio_stream_info.dart';
+import 'package:sigma_music/core/models/lyrics.dart';
+import 'package:sigma_music/core/models/search_result.dart';
+import 'package:sigma_music/core/models/track.dart';
+import 'package:sigma_music/core/plugin/provider_capabilities.dart';
+import 'package:sigma_music/core/plugin/provider_registry.dart';
+import 'package:sigma_music/core/result/result.dart';
 
 /// Provider-agnostic music repository used by all app features.
 ///

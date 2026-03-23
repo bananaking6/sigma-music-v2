@@ -1,14 +1,13 @@
-import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
-import '../../core/models/track.dart';
-import 'playback_queue.dart';
+import 'package:sigma_music/core/models/track.dart';
+import 'package:sigma_music/features/playback/playback_queue.dart';
 
-/// Audio handler for audio_service integration.
+/// Audio handler for playback queue management.
 /// 
-/// This service provides Android system media controls and manages
-/// the media session for the music player.
-class SigmaAudioHandler extends BaseAudioHandler {
+/// This class manages the playback queue and integrates with just_audio
+/// for media playback control.
+class SigmaAudioHandler {
   SigmaAudioHandler({
     required AudioPlayer audioPlayer,
     required PlaybackQueue queue,
@@ -19,145 +18,66 @@ class SigmaAudioHandler extends BaseAudioHandler {
   final PlaybackQueue _queue;
 
   Future<void> initialize() async {
-    // Listen to audio player state changes and update playback state
+    // Listen to audio player state changes
     _audioPlayer.playerStateStream.listen((state) {
-      _updatePlaybackState();
+      // Handle state changes here
     });
 
     _audioPlayer.positionStream.listen((_) {
-      _updatePlaybackState();
+      // Handle position changes here
     });
-
-    _updateQueue();
   }
 
-  /// Synchronizes the queue and current queue index with system media session.
-  void syncQueue(List<Track> tracks, int currentIndex) {
-    queue.add(List<MediaItem>.from(tracks.map(_trackToMediaItem)));
-    queueIndex.add(currentIndex);
+  /// Returns the current track in the queue.
+  Track? get currentTrack => _queue.currentTrack;
+
+  /// Returns all tracks in the queue.
+  List<Track> get queueTracks => _queue.tracks;
+
+  /// Returns current position in queue.
+  int get currentQueueIndex => _queue.currentIndex;
+
+  /// Synchronizes the queue with new tracks.
+  void updateQueue(List<Track> tracks, int currentIndex) {
+    _queue.replace(tracks, startIndex: currentIndex);
   }
 
-  /// Synchronizes currently playing media item for lockscreen/notification.
-  void syncNowPlaying(Track? track) {
-    mediaItem.add(_trackToMediaItem(track));
-  }
+  /// Converts a Track to a display name.
+  String trackDisplayName(Track track) => '${track.title} • ${track.artist.name}';
 
-  /// Updates the media session queue based on the playback queue.
-  void _updateQueue() {
-    mediaItem.add(_trackToMediaItem(_queue.currentTrack));
-    
-    queue.add(
-      List<MediaItem>.from(
-        _queue.tracks.map(_trackToMediaItem),
-      ),
-    );
-    
-    queueIndex.add(_queue.currentIndex);
-  }
-
-  /// Converts a Track to a MediaItem for display in Android's media controls.
-  MediaItem _trackToMediaItem(Track? track) {
-    if (track == null) {
-      return MediaItem(
-        id: '',
-        title: 'No track',
-        artist: '',
-      );
-    }
-
-    return MediaItem(
-      id: track.id,
-      title: track.title,
-      artist: track.artist.name,
-      album: track.album.title,
-      artworkUrl: track.coverUrl,
-      duration: Duration(milliseconds: track.durationMs),
-    );
-  }
-
-  /// Updates the current playback state based on with audio player state.
-  void _updatePlaybackState() {
-    final playerState = _audioPlayer.playerState;
-    final position = _audioPlayer.position;
-    final duration = _audioPlayer.duration ?? Duration.zero;
-
-    playbackState.add(
-      PlaybackState(
-        controls: [
-          MediaControl.skipToPrevious,
-          if (playerState.playing) MediaControl.pause else MediaControl.play,
-          MediaControl.skipToNext,
-          MediaControl.stop,
-        ],
-        systemActions: {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
-        playing: playerState.playing,
-        position: position,
-        updatePosition: position,
-        bufferedPosition: position,
-        speed: _audioPlayer.speed,
-        processingState: _mapProcessingState(playerState.processingState),
-      ),
-    );
-  }
-
-  /// Maps just_audio ProcessingState to audio_service ProcessingState.
-  static AudioProcessingState _mapProcessingState(
-    ProcessingState audioProcessingState,
-  ) {
-    switch (audioProcessingState) {
-      case ProcessingState.idle:
-        return AudioProcessingState.idle;
-      case ProcessingState.loading:
-        return AudioProcessingState.loading;
-      case ProcessingState.buffering:
-        return AudioProcessingState.buffering;
-      case ProcessingState.ready:
-        return AudioProcessingState.ready;
-      case ProcessingState.completed:
-        return AudioProcessingState.completed;
+  /// Play/pause control.
+  Future<void> playPause() async {
+    if (_audioPlayer.playing) {
+      await _audioPlayer.pause();
+    } else {
+      await _audioPlayer.play();
     }
   }
 
-  @override
-  Future<void> play() => _audioPlayer.play();
-
-  @override
-  Future<void> pause() => _audioPlayer.pause();
-
-  @override
-  Future<void> stop() => _audioPlayer.stop();
-
-  @override
+  /// Skip to next track.
   Future<void> skipToNext() async {
     final nextTrack = _queue.next();
     if (nextTrack != null) {
-      mediaItem.add(_trackToMediaItem(nextTrack));
-      queueIndex.add(_queue.currentIndex);
+      // Caller should handle playback of next track
     }
   }
 
-  @override
+  /// Skip to previous track.
   Future<void> skipToPrevious() async {
     final previousTrack = _queue.previous();
     if (previousTrack != null) {
-      mediaItem.add(_trackToMediaItem(previousTrack));
-      queueIndex.add(_queue.currentIndex);
+      // Caller should handle playback of previous track
     }
   }
 
-  @override
+  /// Seek to position.
   Future<void> seek(Duration position) => _audioPlayer.seek(position);
 
-  @override
-  Future<void> skipToQueueItem(int index) async {
+  /// Jump to specific queue item.
+  Future<void> jumpToQueueItem(int index) async {
     final track = _queue.jumpTo(index);
     if (track != null) {
-      mediaItem.add(_trackToMediaItem(track));
-      queueIndex.add(_queue.currentIndex);
+      // Caller should handle playback of track at index
     }
   }
 }

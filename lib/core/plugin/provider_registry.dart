@@ -1,6 +1,6 @@
-import '../result/result.dart';
-import 'music_provider_plugin.dart';
-import 'provider_capabilities.dart';
+import 'package:sigma_music/core/result/result.dart';
+import 'package:sigma_music/core/plugin/music_provider_plugin.dart';
+import 'package:sigma_music/core/plugin/provider_capabilities.dart';
 
 /// Central registry for all [MusicProviderPlugin] instances.
 ///

@@ -1,4 +1,4 @@
-import 'track.dart';
+import 'package:sigma_music/core/models/track.dart';
 
 /// Represents a user-created or provider-generated playlist.
 class Playlist {

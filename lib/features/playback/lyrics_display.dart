@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/models/lyrics.dart';
+import 'package:sigma_music/core/models/lyrics.dart';
 
 /// Widget to display song lyrics.
 class LyricsDisplay extends StatefulWidget {

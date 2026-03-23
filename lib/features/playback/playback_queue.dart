@@ -1,4 +1,4 @@
-import '../../core/models/track.dart';
+import 'package:sigma_music/core/models/track.dart';
 
 /// Manages a queue of tracks for playback.
 class PlaybackQueue {

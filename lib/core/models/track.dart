@@ -1,5 +1,5 @@
-import 'album.dart';
-import 'artist.dart';
+import 'package:sigma_music/core/models/album.dart';
+import 'package:sigma_music/core/models/artist.dart';
 
 /// Represents a single music track.
 class Track {

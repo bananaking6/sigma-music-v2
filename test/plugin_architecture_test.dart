@@ -46,7 +46,7 @@ class FakeProvider implements MusicProviderPlugin {
   int searchCalls = 0;
   int streamInfoCalls = 0;
 
-  static final _artist = const Artist(id: '1', name: 'Test Artist');
+  static const _artist = Artist(id: '1', name: 'Test Artist');
   static final _album = Album(
     id: '1',
     title: 'Test Album',
@@ -128,6 +128,14 @@ class FakeProvider implements MusicProviderPlugin {
   @override
   Future<Result<Playlist>> getPlaylistById(String id) async =>
       const Result.failure('not found');
+
+  @override
+  Future<Result<bool>> isTrackDownloaded(String trackId) async =>
+      const Result.success(false);
+
+  @override
+  Future<Result<void>> downloadTrack(String trackId) async =>
+      const Result.failure('downloads not supported');
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +355,7 @@ void main() {
   group('Domain models equality', () {
     test('Track equality by id', () {
       const artist = Artist(id: 'a1', name: 'Artist');
-      final album = Album(id: 'al1', title: 'Album', artist: artist);
+      const album = Album(id: 'al1', title: 'Album', artist: artist);
       final t1 = Track(
           id: 't1', title: 'A', durationMs: 100, artist: artist, album: album);
       final t2 = Track(
@@ -364,7 +372,7 @@ void main() {
 
     test('Track.duration converts ms to Duration', () {
       const artist = Artist(id: 'a', name: 'A');
-      final album = Album(id: 'al', title: 'Al', artist: artist);
+      const album = Album(id: 'al', title: 'Al', artist: artist);
       final track =
           Track(id: 't', title: 'T', durationMs: 60000, artist: artist, album: album);
       expect(track.duration, const Duration(minutes: 1));

@@ -1,7 +1,7 @@
-import '../core/plugin/provider_registry.dart';
-import '../features/playback/unified_music_repository.dart';
-import '../providers/local/local_provider_plugin.dart';
-import '../providers/tidal/tidal_provider_plugin.dart';
+import 'package:sigma_music/core/plugin/provider_registry.dart';
+import 'package:sigma_music/features/playback/unified_music_repository.dart';
+import 'package:sigma_music/providers/local/local_provider_plugin.dart';
+import 'package:sigma_music/providers/tidal/tidal_provider_plugin.dart';
 
 /// Wires together all providers and produces the root [UnifiedMusicRepository]
 /// instance used throughout the app.

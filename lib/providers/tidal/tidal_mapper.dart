@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import '../../core/models/album.dart';
-import '../../core/models/artist.dart';
-import '../../core/models/audio_stream_info.dart';
-import '../../core/models/lyrics.dart';
-import '../../core/models/track.dart';
+import 'package:sigma_music/core/models/album.dart';
+import 'package:sigma_music/core/models/artist.dart';
+import 'package:sigma_music/core/models/audio_stream_info.dart';
+import 'package:sigma_music/core/models/lyrics.dart';
+import 'package:sigma_music/core/models/track.dart';
 
 /// Maps raw JSON maps from the TIDAL API into domain model objects.
 ///

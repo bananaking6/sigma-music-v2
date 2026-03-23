@@ -1,4 +1,4 @@
-import 'track.dart';
+import 'package:sigma_music/core/models/track.dart';
 
 /// Contains everything needed to start streaming or playing a track.
 class AudioStreamInfo {

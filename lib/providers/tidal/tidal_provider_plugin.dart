@@ -2,20 +2,20 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
-import '../../core/errors/app_error.dart';
-import '../../core/models/album.dart';
-import '../../core/models/artist.dart';
-import '../../core/models/audio_stream_info.dart';
-import '../../core/models/lyrics.dart';
-import '../../core/models/playlist.dart';
-import '../../core/models/search_result.dart';
-import '../../core/models/track.dart';
-import '../../core/plugin/music_provider_plugin.dart';
-import '../../core/plugin/provider_capabilities.dart';
-import '../../core/plugin/provider_types.dart';
-import '../../core/result/result.dart';
-import 'tidal_api_client.dart';
-import 'tidal_endpoint_resolver.dart';
+import 'package:sigma_music/core/errors/app_error.dart';
+import 'package:sigma_music/core/models/album.dart';
+import 'package:sigma_music/core/models/artist.dart';
+import 'package:sigma_music/core/models/audio_stream_info.dart';
+import 'package:sigma_music/core/models/lyrics.dart';
+import 'package:sigma_music/core/models/playlist.dart';
+import 'package:sigma_music/core/models/search_result.dart';
+import 'package:sigma_music/core/models/track.dart';
+import 'package:sigma_music/core/plugin/music_provider_plugin.dart';
+import 'package:sigma_music/core/plugin/provider_capabilities.dart';
+import 'package:sigma_music/core/plugin/provider_types.dart';
+import 'package:sigma_music/core/result/result.dart';
+import 'package:sigma_music/providers/tidal/tidal_api_client.dart';
+import 'package:sigma_music/providers/tidal/tidal_endpoint_resolver.dart';
 
 /// TIDAL music provider plugin (no-auth implementation).
 ///
